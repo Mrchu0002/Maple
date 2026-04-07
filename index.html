@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>메이플 수익 기록부</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Pretendard', sans-serif; padding: 20px; background-color: #f0f2f5; color: #333; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        
+        /* 대시보드 스타일 */
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #fff; border: 1px solid #eee; padding: 20px; border-radius: 12px; text-align: center; }
+        .stat-card h3 { margin: 0; font-size: 14px; color: #666; }
+        .stat-card .amount { font-size: 22px; font-weight: bold; color: #f39c12; margin-top: 10px; }
+
+        /* 입력 폼 스타일 */
+        .input-group { display: flex; gap: 10px; margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; }
+        input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        button.save-btn { padding: 12px 25px; background-color: #f39c12; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button.save-btn:hover { background-color: #e67e22; }
+
+        /* 테이블 스타일 */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background-color: #fff; color: #888; font-size: 13px; text-transform: uppercase; }
+        .delete-btn { padding: 5px 10px; background-color: #ff4757; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .delete-btn:hover { background-color: #ff6b81; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🍁 메이플 수익 누적기록부</h2>
+        
+        <div class="dashboard">
+            <div class="stat-card">
+                <h3>오늘의 수익</h3>
+                <div id="todayTotal" class="amount">0 메소</div>
+            </div>
+            <div class="stat-card">
+                <h3>이번 주 누적 수익</h3>
+                <div id="weekTotal" class="amount">0 메소</div>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <input type="text" id="charName" placeholder="캐릭터명">
+            <input type="text" id="content" placeholder="항목 (재획, 보스 등)">
+            <input type="number" id="amount" placeholder="메소 금액">
+            <button class="save-btn" onclick="saveLog()">기록하기</button>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>날짜</th>
+                    <th>캐릭터</th>
+                    <th>항목</th>
+                    <th>수익 (메소)</th>
+                    <th>관리</th>
+                </tr>
+            </thead>
+            <tbody id="logTable"></tbody>
+        </table>
+    </div>
+
+    <script>
+        // ⚠️ 본인의 정보를 입력하세요
+        const SUPABASE_URL = 'https://fbmnyvsnawcjlvxdbctw.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_LtCFQXm4FzsCX6tCIQDg2g_5YLxuf2j';
+
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // 데이터 저장
+        async function saveLog() {
+            const charName = document.getElementById('charName').value;
+            const content = document.getElementById('content').value;
+            const amount = document.getElementById('amount').value;
+
+            if(!charName || !amount) return alert("필수 정보를 입력해주세요!");
+
+            const { error } = await _supabase
+                .from('income_logs')
+                .insert([{ character_name: charName, content: content, amount: parseInt(amount) }]);
+
+            if (error) alert('저장 실패: ' + error.message);
+            else {
+                document.getElementById('content').value = '';
+                document.getElementById('amount').value = '';
+                loadLogs();
+            }
+        }
+
+        // 데이터 삭제
+        async function deleteLog(id) {
+            if(!confirm("정말로 이 기록을 삭제하시겠습니까?")) return;
+
+            const { error } = await _supabase
+                .from('income_logs')
+                .delete()
+                .eq('id', id);
+
+            if (error) alert('삭제 실패: ' + error.message);
+            else loadLogs();
+        }
+
+        // 데이터 불러오기 및 대시보드 계산
+        async function loadLogs() {
+            const { data, error } = await _supabase
+                .from('income_logs')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) return console.error(error);
+
+            // 1. 테이블 업데이트
+            const tbody = document.getElementById('logTable');
+            tbody.innerHTML = '';
+            
+            data.forEach(log => {
+                const row = `<tr>
+                    <td>${new Date(log.created_at).toLocaleDateString()}</td>
+                    <td>${log.character_name}</td>
+                    <td>${log.content}</td>
+                    <td>${Number(log.amount).toLocaleString()}</td>
+                    <td><button class="delete-btn" onclick="deleteLog(${log.id})">삭제</button></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+
+            // 2. 대시보드 계산 (reduce 활용)
+            const now = new Date();
+            const todayStr = now.toLocaleDateString();
+            
+            // 이번 주 월요일 찾기
+            const day = now.getDay(); 
+            const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
+            const monday = new Date(now.setDate(diff)).setHours(0,0,0,0);
+
+            const todaySum = data
+                .filter(log => new Date(log.created_at).toLocaleDateString() === todayStr)
+                .reduce((acc, cur) => acc + Number(cur.amount), 0);
+
+            const weekSum = data
+                .filter(log => new Date(log.created_at) >= monday)
+                .reduce((acc, cur) => acc + Number(cur.amount), 0);
+
+            document.getElementById('todayTotal').innerText = todaySum.toLocaleString() + " 메소";
+            document.getElementById('weekTotal').innerText = weekSum.toLocaleString() + " 메소";
+        }
+
+        loadLogs();
+    </script>
+</body>
+</html>
