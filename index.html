@@ -63,6 +63,118 @@
             </thead>
             <tbody id="logTable"></tbody>
         </table>
+        <hr style="margin: 40px 0; border: 0; border-top: 1px dashed #ddd;">
+
+<div class="summary-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="margin: 0;">📊 월별/캐릭터별 요약</h3>
+        <select id="monthFilter" onchange="loadLogs()" style="padding: 8px; border-radius: 6px;">
+            <option value="all">전체 보기</option>
+            <option value="1">1월 수익</option>
+            <option value="2">2월 수익</option>
+            <option value="3">3월 수익</option>
+            <option value="4" selected>4월 수익</option>
+            <option value="5">5월 수익</option>
+            <option value="6">6월 수익</option>
+            <option value="7">7월 수익</option>
+            <option value="8">8월 수익</option>
+            <option value="9">9월 수익</option>
+            <option value="10">10월 수익</option>
+            <option value="11">11월 수익</option>
+            <option value="12">12월 수익</option>
+        </select>
+    </div>
+
+    <table style="background-color: #fff; border-radius: 10px; overflow: hidden;">
+        <thead style="background-color: #eee;">
+            <tr>
+                <th>캐릭터</th>
+                <th>해당 월 총 수익</th>
+                <th>비율</th>
+            </tr>
+        </thead>
+        <tbody id="charSummaryTable">
+            </tbody>
+    </table>
+</div>
+
+<script>
+    // 기존 loadLogs 함수를 아래 내용으로 덮어쓰기 하세요!
+    async function loadLogs() {
+        const { data, error } = await _supabase
+            .from('income_logs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) return console.error(error);
+
+        const selectedMonth = document.getElementById('monthFilter').value;
+        const now = new Date();
+        const todayStr = now.toLocaleDateString();
+
+        // 1. 메인 테이블 업데이트 (필터링 적용)
+        const tbody = document.getElementById('logTable');
+        tbody.innerHTML = '';
+        
+        let filteredData = data;
+        if (selectedMonth !== 'all') {
+            filteredData = data.filter(log => {
+                const logDate = new Date(log.created_at);
+                return logDate.getMonth() + 1 === parseInt(selectedMonth) && logDate.getFullYear() === now.getFullYear();
+            });
+        }
+
+        filteredData.forEach(log => {
+            const row = `<tr>
+                <td>${new Date(log.created_at).toLocaleDateString()}</td>
+                <td>${log.character_name}</td>
+                <td>${log.content}</td>
+                <td>${Number(log.amount).toLocaleString()}</td>
+                <td><button class="delete-btn" onclick="deleteLog(${log.id})">삭제</button></td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+
+        // 2. 대시보드 계산 (전체 데이터 기준)
+        const todaySum = data
+            .filter(log => new Date(log.created_at).toLocaleDateString() === todayStr)
+            .reduce((acc, cur) => acc + Number(cur.amount), 0);
+
+        const day = now.getDay(); 
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); 
+        const monday = new Date(new Date().setDate(diff)).setHours(0,0,0,0);
+        const weekSum = data
+            .filter(log => new Date(log.created_at) >= monday)
+            .reduce((acc, cur) => acc + Number(cur.amount), 0);
+
+        document.getElementById('todayTotal').innerText = todaySum.toLocaleString() + " 메소";
+        document.getElementById('weekTotal').innerText = weekSum.toLocaleString() + " 메소";
+
+        // 3. 캐릭터별 요약 계산 (선택된 월 기준)
+        const charSummary = {};
+        let monthTotal = 0;
+
+        filteredData.forEach(log => {
+            const name = log.character_name;
+            const amt = Number(log.amount);
+            charSummary[name] = (charSummary[name] || 0) + amt;
+            monthTotal += amt;
+        });
+
+        const charTbody = document.getElementById('charSummaryTable');
+        charTbody.innerHTML = '';
+        
+        for (const [name, total] of Object.entries(charSummary)) {
+            const percent = monthTotal > 0 ? ((total / monthTotal) * 100).toFixed(1) : 0;
+            const charRow = `<tr>
+                <td><strong>${name}</strong></td>
+                <td>${total.toLocaleString()} 메소</td>
+                <td><small>${percent}%</small></td>
+            </tr>`;
+            charTbody.innerHTML += charRow;
+        }
+    }
+</script>
     </div>
 
     <script>
