@@ -52,7 +52,7 @@
         <div class="input-group">
             <input type="text" id="charName" placeholder="캐릭터명">
             <input type="text" id="content" placeholder="항목 (재획, 보스 등)">
-            <input type="number" id="amount" placeholder="메소 금액">
+            <input type="text" id="amount" placeholder="메소 금액" oninput="inputNumberFormat(this)">
             <button class="save-btn" onclick="saveLog()">기록하기</button>
         </div>
 
@@ -97,7 +97,7 @@
                     </tr>
                 </thead>
                 <tbody id="charSummaryTable">
-                    </tbody>
+                </tbody>
             </table>
         </div>
     </div>
@@ -108,17 +108,25 @@
         const SUPABASE_KEY = 'sb_publishable_LtCFQXm4FzsCX6tCIQDg2g_5YLxuf2j';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        // [함수] 숫자에 실시간으로 콤마를 찍어주는 기능
+        function inputNumberFormat(obj) {
+            let value = obj.value.replace(/[^\d]/g, ""); // 숫자 외 문자 제거
+            obj.value = value.replace(/\B(?=(\d{3})+(?!\d))/g, ","); // 3자리마다 콤마
+        }
+
         // [함수] 데이터 저장
         async function saveLog() {
             const charName = document.getElementById('charName').value;
             const content = document.getElementById('content').value;
-            const amount = document.getElementById('amount').value;
+            // 콤마 제거 후 숫자로 변환
+            const rawAmount = document.getElementById('amount').value.replace(/,/g, "");
+            const amount = parseInt(rawAmount);
 
-            if(!charName || !amount) return alert("캐릭터명과 금액을 입력해주세요!");
+            if(!charName || isNaN(amount)) return alert("캐릭터명과 금액을 정확히 입력해주세요!");
 
             const { error } = await _supabase
                 .from('income_logs')
-                .insert([{ character_name: charName, content: content, amount: parseInt(amount) }]);
+                .insert([{ character_name: charName, content: content, amount: amount }]);
 
             if (error) alert('저장 실패: ' + error.message);
             else {
@@ -147,9 +155,10 @@
 
             const selectedMonth = document.getElementById('monthFilter').value;
             const now = new Date();
-            const todayStr = now.toLocaleDateString();
+            const currentYear = now.getFullYear();
 
-            // 1. 상단 대시보드 (오늘/이번주)
+            // 1. 상단 대시보드
+            const todayStr = now.toLocaleDateString();
             const todaySum = data
                 .filter(log => new Date(log.created_at).toLocaleDateString() === todayStr)
                 .reduce((acc, cur) => acc + Number(cur.amount), 0);
@@ -179,8 +188,7 @@
                 const logMonth = logDate.getMonth() + 1;
                 const logYear = logDate.getFullYear();
 
-                // 선택한 월 필터링
-                if (selectedMonth === 'all' || (logMonth === parseInt(selectedMonth) && logYear === now.getFullYear())) {
+                if (selectedMonth === 'all' || (logMonth === parseInt(selectedMonth) && logYear === currentYear)) {
                     const row = `<tr>
                         <td>${logDate.toLocaleDateString()}</td>
                         <td>${log.character_name}</td>
@@ -215,7 +223,6 @@
             }
         }
 
-        // 초기 실행
         loadLogs();
     </script>
 </body>
